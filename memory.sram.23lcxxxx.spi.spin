@@ -1,77 +1,211 @@
 {
     --------------------------------------------
     Filename: memory.sram.23lcxxxx.spi.spin
-    Author:
-    Description:
+    Author: Jesse Burt
+    Description: Driver for Microchip 23LCxxxx series
+        SPI SRAM
     Copyright (c) 2019
     Started May 20, 2019
-    Updated May 20, 2019
+    Updated Dec 14, 2019
     See end of file for terms of use.
     --------------------------------------------
 }
 
 CON
 
+' Read/write operation modes
+    OPMODE_BYTE = %00
+    OPMODE_SEQ  = %01
+    OPMODE_PAGE = %10
+
+' SPI transaction types
+    TRANS_CMD   = 0
+    TRANS_DATA  = 1
 
 VAR
 
-    byte _CS, _MOSI, _MISO, _SCK
+    byte _CS, _SCK, _MOSI, _MISO
 
 OBJ
 
-    spi : "com.spi.fast"                                             'PASM SPI Driver
-    core: "core.con.23lcxxxx"                       'File containing your device's register set
-    time: "time"                                                'Basic timing functions
+    spi : "com.spi.4w"
+    core: "core.con.23lcxxxx"
+    time: "time"
+    io  : "io"
 
 PUB Null
-''This is not a top-level object
+'This is not a top-level object
 
-PUB Start(CS_PIN, SCK_PIN, MOSI_PIN, MISO_PIN) : okay
+PUB Start(CS_PIN, SCK_PIN, MOSI_PIN, MISO_PIN): okay
 
-    okay := Startx(CS_PIN, SCK_PIN, MOSI_PIN, MISO_PIN, core#CLK_DELAY, core#CPOL)
-
-PUB Startx(CS_PIN, SCK_PIN, MOSI_PIN, MISO_PIN, SCK_DELAY, SCK_CPOL): okay
-    if SCK_DELAY => 1 and lookdown(SCK_CPOL: 0, 1)
-        if okay := spi.start (SCK_DELAY, SCK_CPOL)              'SPI Object Started?
-            time.MSleep (1)                                     'Add startup delay appropriate to your device (consult its datasheet)
-            _CS := CS_PIN
-            _MOSI := MOSI_PIN
-            _MISO := MISO_PIN
-            _SCK := SCK_PIN
-
-            outa[_CS] := 1
-            dira[_CS] := 1
-
-            return okay
+    if okay := spi.start (1, core#CPOL)
+        time.MSleep (1)
+        _CS := CS_PIN
+        _SCK := SCK_PIN
+        _MOSI := MOSI_PIN
+        _MISO := MISO_PIN
+        io.High(_CS)
+        io.Output(_CS)
+        return okay
 
     return FALSE                                                'If we got here, something went wrong
 
-PRI readRegX(reg, nr_bytes, buf_addr) | i
-' Read nr_bytes from register 'reg' to address 'buf_addr'
+PUB Stop
 
-' Handle quirky registers on a case-by-case basis
-    case reg
-        core#REG_NAME:
-            'Special handling for register REG_NAME
+    spi.Stop
+
+PUB OpMode(mode) | tmp
+' Set read/write operation mode
+'   Valid values:
+'       OPMODE_BYTE (%00): Single byte R/W access
+'       OPMODE_SEQ (%01): Sequential R/W access (crosses page boundaries)
+'       OPMODE_PAGE (%10): Single page R/W access
+'   Any other value polls the chip and returns the current setting
+    readReg (TRANS_CMD, core#RDMR, 1, @tmp)
+    case mode
+        OPMODE_BYTE, OPMODE_SEQ, OPMODE_PAGE:
+            mode := (mode << core#FLD_WR_MODE) & core#WRMR_MASK
         OTHER:
+            result := (tmp >> 6) & core#BITS_WR_MODE
+            return
 
-    outa[_CS] := 0
-    spi.SHIFTOUT(_MOSI, _SCK, core#MOSI_BITORDER, 8, reg)
-    
-    repeat i from 0 to nr_bytes
-        byte[buf_addr][i] := spi.SHIFTIN(_MISO, _SCK, core#MISO_BITORDER, 8)
-    outa[_CS] := 1
+    writeReg (TRANS_CMD, core#WRMR, 1, @mode)
 
-PRI writeRegX(reg, nr_bytes, buf_addr) | i
-' Write nr_bytes to register 'reg' stored at buf_addr
+PUB ReadByte(sram_addr)
+' Read a single byte from SRAM
+'   Valid values:
+'       sram_addr: 0..$F_FF_FF
+'   Any other value is ignored                                                                                   
+    OpMode(OPMODE_BYTE)
+    readReg(TRANS_DATA, sram_addr, 1, @result)
 
-    outa[_CS] := 0
-    spi.SHIFTOUT(_MOSI, _SCK, core#MOSI_BITORDER, 8, reg)
+PUB ReadBytes(sram_addr, nr_bytes, buff_addr)
+' Read multiple bytes from SRAM
+'   Valid values:
+'       sram_addr: 0..$F_FF_FF
+'   Any other value is ignored                                                                                   
+    readReg(TRANS_DATA, sram_addr, nr_bytes, buff_addr)
 
-    repeat i from 0 to nr_bytes
-        spi.SHIFTOUT(_MOSI, _SCK, core#MISO_BITORDER, 8, byte[buf_addr][i])
+PUB ReadPage(sram_page_nr, nr_bytes, buff_addr)
+' Read up to 32 bytes from SRAM page
+'   Valid values:
+'       sram_page_nr: 0..4095
+'   Any other value is ignored
+    case sram_page_nr
+        0..4095:
+            OpMode(OPMODE_PAGE)
+            readReg(TRANS_DATA, sram_page_nr << 5 {*32}, nr_bytes, buff_addr)
+            return
+        OTHER:
+            return FALSE
 
-    outa[_CS] := 1
+PUB ResetIO
+' Reset to SPI mode
+    writeReg(TRANS_CMD, core#RSTIO, 1, 0)
+
+PUB WriteByte(sram_addr, val)
+' Write a single byte to SRAM
+'   Valid values:
+'       sram_addr: 0..$F_FF_FF
+'   Any other value is ignored
+    OpMode(OPMODE_BYTE)
+    val &= $FF
+    writeReg(TRANS_DATA, sram_addr, 1, @val)
+
+PUB WriteBytes(sram_addr, nr_bytes, buff_addr)
+' Write multiple bytes to SRAM
+'   Valid values:
+'       sram_addr: 0..$F_FF_FF
+'   Any other value is ignored
+    OpMode(OPMODE_SEQ)
+    writeReg(TRANS_DATA, sram_addr, nr_bytes, buff_addr)
+
+PUB WritePage(sram_page_nr, nr_bytes, buff_addr)
+' Write up to 32 bytes to SRAM page
+'   Valid values:
+'       sram_page_nr: 0..4095
+'   Any other value is ignored
+    case sram_page_nr
+        0..4095:
+            OpMode(OPMODE_PAGE)
+            writeReg(TRANS_DATA, sram_page_nr << 5 {*32}, nr_bytes, buff_addr)
+            return
+        OTHER:
+            return FALSE
+
+PRI readReg(trans_type, reg, nr_bytes, buff_addr) | cmd_packet, tmp
+' Read nr_bytes from register 'reg' to address 'buff_addr'
+    case trans_type
+        TRANS_CMD:
+            case reg
+                core#RDMR:
+                    io.Low(_CS)
+                    spi.ShiftOut (_MOSI, _SCK, core#MOSI_BITORDER, 8, reg)
+                    result := spi.ShiftIn (_MISO, _SCK, core#MISO_BITORDER, 8)
+                    io.High(_CS)
+                    return
+
+        TRANS_DATA:
+            case reg
+                0..$0F_FF_FF:
+                    cmd_packet.byte[0] := core#READ
+                    cmd_packet.byte[1] := reg.byte[2]
+                    cmd_packet.byte[2] := reg.byte[1]
+                    cmd_packet.byte[3] := reg.byte[0]
+
+                    io.Low(_CS)
+                    repeat tmp from 0 to 3
+                        spi.SHIFTOUT (_MOSI, _SCK, core#MOSI_BITORDER, 8, cmd_packet.byte[tmp])
+                    repeat tmp from 0 to nr_bytes-1
+                        byte[buff_addr][tmp] := spi.SHIFTIN (_MISO, _SCK, core#MISO_BITORDER, 8)
+                    io.High(_CS)
+                    return
+                OTHER:
+                    return FALSE
+        OTHER:
+            return FALSE
+
+PRI writeReg(trans_type, reg, nr_bytes, buff_addr) | cmd_packet, tmp
+' Write nr_bytes to register 'reg' stored at buff_addr
+    case trans_type
+        TRANS_CMD:
+            case reg
+                core#WRMR:
+                    cmd_packet.byte[0] := reg
+                    cmd_packet.byte[1] := byte[buff_addr][0]
+                    io.Low(_CS)
+                    repeat tmp from 0 to 1
+                        spi.ShiftOut (_MOSI, _SCK, core#MOSI_BITORDER, 8, cmd_packet.byte[tmp])
+                    io.High(_CS)
+                    return
+                core#EQIO, core#EDIO, core#RSTIO:
+                    io.Low(_CS)
+                    spi.ShiftOut (_MOSI, _SCK, core#MOSI_BITORDER, 8, reg)
+                    io.High(_CS)
+                    return
+
+                OTHER:
+                    return FALSE        
+        TRANS_DATA:
+            case reg
+                0..$0F_FF_FF:
+                    cmd_packet.byte[0] := core#WRITE
+                    cmd_packet.byte[1] := reg.byte[2]
+                    cmd_packet.byte[2] := reg.byte[1]
+                    cmd_packet.byte[3] := reg.byte[0]
+
+                    io.Low(_CS)
+                    repeat tmp from 0 to 3
+                        spi.SHIFTOUT (_MOSI, _SCK, core#MOSI_BITORDER, 8, cmd_packet.byte[tmp])
+                    repeat tmp from 0 to nr_bytes-1
+                        spi.SHIFTOUT (_MOSI, _SCK, core#MOSI_BITORDER, 8, byte[buff_addr][tmp])
+                    io.High(_CS)
+                    return
+                OTHER:
+                    return FALSE
+        
+        OTHER:
+            return FALSE
 
 DAT
 {
