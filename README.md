@@ -1,23 +1,27 @@
 # 23lcxxxx-spin 
 ---------------
 
-This is a P8X32A/Propeller [driver] object for ____.
+This is a P8X32A/Propeller driver object for Microchip 23LCxxxx-series SRAM
 
 ## Salient Features
 
-* Feature 1
-* Feature 2
+* SPI connection at up to 1MHz
+* Operations for reading and writing a single byte, up to a 32-byte page, or multiple bytes across page boundaries
 
 ## Requirements
 
-* Requirement 1
+* 1 extra core/cog for the PASM SPI driver
+
+## Compiler Compatibility
+
+- [x] OpenSpin (tested with 1.00.81)
 
 ## Limitations
 
-* Limitation 1
-* Limitation 2
+* Very early in development - may malfunction or outright fail to build
+* Single-lane SPI only (i.e., no DSPI, QSPI)
 
 ## TODO
 
-* Task item 1
-* Task item 2
+- [ ] Port to 20MHz SPI driver
+* [ ] Add more extensive demos
