@@ -28,7 +28,7 @@ VAR
 
 OBJ
 
-    spi : "com.spi.4w"
+    spi : "com.spi.fast"
     core: "core.con.23lcxxxx"
     time: "time"
     io  : "io"
@@ -38,14 +38,8 @@ PUB Null
 
 PUB Start(CS_PIN, SCK_PIN, MOSI_PIN, MISO_PIN): okay
 
-    if okay := spi.start (1, core#CPOL)
+    if okay := spi.Start (CS_PIN, SCK_PIN, MOSI_PIN, MISO_PIN)
         time.MSleep (1)
-        _CS := CS_PIN
-        _SCK := SCK_PIN
-        _MOSI := MOSI_PIN
-        _MISO := MISO_PIN
-        io.High(_CS)
-        io.Output(_CS)
         return okay
 
     return FALSE                                                'If we got here, something went wrong
@@ -139,10 +133,8 @@ PRI readReg(trans_type, reg, nr_bytes, buff_addr) | cmd_packet, tmp
         TRANS_CMD:
             case reg
                 core#RDMR:
-                    io.Low(_CS)
-                    spi.ShiftOut (_MOSI, _SCK, core#MOSI_BITORDER, 8, reg)
-                    result := spi.ShiftIn (_MISO, _SCK, core#MISO_BITORDER, 8)
-                    io.High(_CS)
+                    spi.Write (TRUE, @reg, 1, FALSE)
+                    result := spi.Read(@result, 1)
                     return
 
         TRANS_DATA:
@@ -153,12 +145,8 @@ PRI readReg(trans_type, reg, nr_bytes, buff_addr) | cmd_packet, tmp
                     cmd_packet.byte[2] := reg.byte[1]
                     cmd_packet.byte[3] := reg.byte[0]
 
-                    io.Low(_CS)
-                    repeat tmp from 0 to 3
-                        spi.SHIFTOUT (_MOSI, _SCK, core#MOSI_BITORDER, 8, cmd_packet.byte[tmp])
-                    repeat tmp from 0 to nr_bytes-1
-                        byte[buff_addr][tmp] := spi.SHIFTIN (_MISO, _SCK, core#MISO_BITORDER, 8)
-                    io.High(_CS)
+                    spi.Write(TRUE, @cmd_packet, 4, FALSE)
+                    spi.Read(buff_addr, nr_bytes)
                     return
                 OTHER:
                     return FALSE
@@ -173,15 +161,10 @@ PRI writeReg(trans_type, reg, nr_bytes, buff_addr) | cmd_packet, tmp
                 core#WRMR:
                     cmd_packet.byte[0] := reg
                     cmd_packet.byte[1] := byte[buff_addr][0]
-                    io.Low(_CS)
-                    repeat tmp from 0 to 1
-                        spi.ShiftOut (_MOSI, _SCK, core#MOSI_BITORDER, 8, cmd_packet.byte[tmp])
-                    io.High(_CS)
+                    spi.Write(TRUE, @cmd_packet, 2, TRUE)
                     return
                 core#EQIO, core#EDIO, core#RSTIO:
-                    io.Low(_CS)
-                    spi.ShiftOut (_MOSI, _SCK, core#MOSI_BITORDER, 8, reg)
-                    io.High(_CS)
+                    spi.Write(TRUE, @reg, 1, TRUE)
                     return
 
                 OTHER:
@@ -194,12 +177,8 @@ PRI writeReg(trans_type, reg, nr_bytes, buff_addr) | cmd_packet, tmp
                     cmd_packet.byte[2] := reg.byte[1]
                     cmd_packet.byte[3] := reg.byte[0]
 
-                    io.Low(_CS)
-                    repeat tmp from 0 to 3
-                        spi.SHIFTOUT (_MOSI, _SCK, core#MOSI_BITORDER, 8, cmd_packet.byte[tmp])
-                    repeat tmp from 0 to nr_bytes-1
-                        spi.SHIFTOUT (_MOSI, _SCK, core#MOSI_BITORDER, 8, byte[buff_addr][tmp])
-                    io.High(_CS)
+                    spi.Write(TRUE, @cmd_packet, 4, FALSE)
+                    spi.Write(TRUE, buff_addr, nr_bytes, TRUE)
                     return
                 OTHER:
                     return FALSE

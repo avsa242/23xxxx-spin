@@ -5,7 +5,7 @@ This is a P8X32A/Propeller driver object for Microchip 23LCxxxx-series SRAM
 
 ## Salient Features
 
-* SPI connection at up to 1MHz
+* SPI connection at a fixed 20MHz (writes) and 10MHz (reads)
 * Operations for reading and writing a single byte, up to a 32-byte page, or multiple bytes across page boundaries
 
 ## Requirements
@@ -23,5 +23,5 @@ This is a P8X32A/Propeller driver object for Microchip 23LCxxxx-series SRAM
 
 ## TODO
 
-- [ ] Port to 20MHz SPI driver
-* [ ] Add more extensive demos
+- [x] Port to 20MHz SPI driver
+- [ ] Add more extensive demos

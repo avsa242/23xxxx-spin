@@ -69,7 +69,9 @@ PUB Main | base, s, e
             "s":
                 base := 0
             "w":
-                WriteTest(base)
+                WriteTest(base << 5)
+            "x":
+                ErasePage(base)
             "q":
                 ser.Str(string("Halting", ser#CR, ser#LF))
                 quit
@@ -77,15 +79,16 @@ PUB Main | base, s, e
 
     FlashLED(LED, 100)
 
+PUB ErasePage(base) | tmp[8]
+
+    bytefill(@tmp, $00, 32)
+    sram.WritePage(base, 32, @tmp)
+
 PUB WriteTest(base) | tmp, i
 
-    tmp.byte[0] := $DE
-    tmp.byte[1] := $AD
-    tmp.byte[2] := $BE
-    tmp.byte[3] := $EF
-
+    tmp := string("TEST")
     repeat i from 0 to 3
-        sram.WriteByte(i, tmp.byte[i])
+        sram.WriteByte(base + i, byte[tmp][i])
 
 PUB usec(ticks)
 
