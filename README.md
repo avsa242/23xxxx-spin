@@ -14,7 +14,7 @@ This is a P8X32A/Propeller driver object for Microchip 23LCxxxx-series SRAM
 
 ## Compiler Compatibility
 
-- [x] OpenSpin (tested with 1.00.81)
+- P1/SPIN1: OpenSpin (tested with 1.00.81)
 
 ## Limitations
 
