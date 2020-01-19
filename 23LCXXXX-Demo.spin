@@ -1,11 +1,11 @@
 {
     --------------------------------------------
-    Filename: 23LCXXXX-Test.spin
-    Author:
-    Description:
-    Copyright (c) 2019
+    Filename: 23LCXXXX-Demo.spin
+    Author: Jesse Burt
+    Description: Simple demo of the 23LCXXXX driver
+    Copyright (c) 2020
     Started May 20, 2019
-    Updated May 20, 2019
+    Updated Jan 19, 2020
     See end of file for terms of use.
     --------------------------------------------
 }
@@ -15,80 +15,96 @@ CON
     _clkmode    = cfg#_clkmode
     _xinfreq    = cfg#_xinfreq
     CLK_FREQ    = ((_clkmode - xtal1) >> 6) * _xinfreq
-
     TICKS_USEC  = CLK_FREQ / 1_000_000
 
+' User-modifiable constants
+    SER_RX      = 31
+    SER_TX      = 30
+    SER_BAUD    = 115_200
     LED         = cfg#LED1
-
     CS_PIN      = 4
     SCK_PIN     = 2
     MOSI_PIN    = 1
     MISO_PIN    = 0
+    PART        = 1024                              ' 64 = 23K640, 256 = 23K256, 512 = 23LC512, 1024 = 23LC1024
 
-    RAMSIZE     = 131072
-    RAMEND      = RAMSIZE-1
+' Calculations based on PART
+    RAMSIZE     = (PART / 8) * 1024
+    RAM_END     = RAMSIZE - 1
+    PAGESIZE    = 32                                ' Page size is the same for all Microchip SRAMs
+    LASTPAGE    = (RAMSIZE/PAGESIZE) - 1
 
 OBJ
 
     cfg     : "core.con.boardcfg.flip"
     ser     : "com.serial.terminal.ansi"
     time    : "time"
+    int     : "string.integer"
     io      : "io"
     sram    : "memory.sram.23lcxxxx.spi"
 
 VAR
 
     byte _ser_cog, _sram_cog
-    byte _sram_buff[32]
+    byte _sram_buff[PAGESIZE]
 
-PUB Main | base, s, e
+PUB Main | base_page, start, elapsed
 
     Setup
 
-    base := 0
+    ser.position(0, 3)
+    ser.str(string("SRAM size set to "))
+    ser.dec(RAMSIZE)
+    ser.str(string("kbytes (23LC"))
+    ser.dec(PART)
+    ser.str(string(")", ser#CR, ser#LF))
+
+    base_page := 0
+    sram.OpMode(sram#PAGE)                                          ' Set Page access mode
+
     repeat
-        s := cnt
-        sram.ReadPage(base, 32, @_sram_buff)
-        e := cnt-s
-        Hexdump(@_sram_buff, base << 5, 32, 8, 0, 5)
+        start := cnt                                                '
+        sram.ReadPage(base_page, PAGESIZE, @_sram_buff)             ' Simple speed test
+        elapsed := cnt-start                                        '
+        ser.Hexdump(@_sram_buff, base_page << 5, PAGESIZE, 8, 0, 5)
         ser.Str(string(ser#CR, ser#LF, "Reading done ("))
-        ser.Dec(usec(e))
+        ser.Dec(usec(elapsed))
         ser.Str(string("us)", ser#CR, ser#LF))
 
         case ser.CharIn
-            "[":
-                base := base - 1
-                if base < 0
-                    base := 0
-            "]":
-                base := base + 1
-                if base > 4095
-                    base := 4095
-            "e":
-                base := 4095
-            "s":
-                base := 0
-            "w":
-                WriteTest(base << 5)
-            "x":
-                ErasePage(base)
-            "q":
+            "[":                                                    ' Go back a page in SRAM
+                base_page--
+                if base_page < 0
+                    base_page := 0
+            "]":                                                    ' Go forward a page
+                base_page++
+                if base_page > LASTPAGE
+                    base_page := LASTPAGE
+            "e":                                                    ' Go to the last page
+                base_page := LASTPAGE
+            "s":                                                    ' Go to the first page
+                base_page := 0
+            "w":                                                    ' Write a test string to the current page
+                WriteTest(base_page << 5)
+            "x":                                                    ' Erase the current page
+                ErasePage(base_page)
+            "q":                                                    ' Quit the demo and shutdown
                 ser.Str(string("Halting", ser#CR, ser#LF))
+                Stop
                 quit
             OTHER:
 
     FlashLED(LED, 100)
 
-PUB ErasePage(base) | tmp[8]
-
-    bytefill(@tmp, $00, 32)
-    sram.WritePage(base, 32, @tmp)
+PUB ErasePage(base_page) | tmp[8]
+' Erase a page of SRAM
+    bytefill(@tmp, $00, PAGESIZE)
+    sram.WritePage(base_page, PAGESIZE, @tmp)
 
 PUB WriteTest(base) | tmp, i
-
-    tmp := string("TEST")
-    repeat i from 0 to 3
-        sram.WriteByte(base + i, byte[tmp][i])
+' Write a test string to the SRAM
+    tmp := string("TESTING TESTING 1 2 3")
+    sram.WriteBytes(base, strsize(tmp), tmp)
 
 PUB usec(ticks)
 
@@ -96,7 +112,7 @@ PUB usec(ticks)
 
 PUB Setup
 
-    repeat until _ser_cog := ser.Start (115_200)
+    repeat until _ser_cog := ser.StartRXTX (SER_RX, SER_TX, 0, SER_BAUD)
     time.MSleep(100)
     ser.Clear
     ser.Str(string("Serial terminal started", ser#CR, ser#LF))
@@ -105,16 +121,15 @@ PUB Setup
     else
         ser.Str(string("23LCXXXX driver failed to start - halting", ser#CR, ser#LF))
         Stop
+        FlashLED(LED, 500)
 
 PUB Stop
 
     time.MSleep (5)
     ser.Stop
     sram.Stop
-    FlashLED (LED, 100)
 
 #include "lib.utility.spin"
-#include "lib.termwidgets.spin"
 
 DAT
 {

@@ -4,9 +4,9 @@
     Author: Jesse Burt
     Description: Driver for Microchip 23LCxxxx series
         SPI SRAM
-    Copyright (c) 2019
+    Copyright (c) 2020
     Started May 20, 2019
-    Updated Dec 14, 2019
+    Updated Jan 19, 2020
     See end of file for terms of use.
     --------------------------------------------
 }
@@ -14,9 +14,9 @@
 CON
 
 ' Read/write operation modes
-    OPMODE_BYTE = %00
-    OPMODE_SEQ  = %01
-    OPMODE_PAGE = %10
+    ONEBYTE     = %00
+    SEQ         = %01
+    PAGE        = %10
 
 ' SPI transaction types
     TRANS_CMD   = 0
@@ -51,13 +51,13 @@ PUB Stop
 PUB OpMode(mode) | tmp
 ' Set read/write operation mode
 '   Valid values:
-'       OPMODE_BYTE (%00): Single byte R/W access
-'       OPMODE_SEQ (%01): Sequential R/W access (crosses page boundaries)
-'       OPMODE_PAGE (%10): Single page R/W access
+'       ONEBYTE (%00): Single byte R/W access
+'       SEQ (%01): Sequential R/W access (crosses page boundaries)
+'       PAGE (%10): Single page R/W access
 '   Any other value polls the chip and returns the current setting
     readReg (TRANS_CMD, core#RDMR, 1, @tmp)
     case mode
-        OPMODE_BYTE, OPMODE_SEQ, OPMODE_PAGE:
+        ONEBYTE, SEQ, PAGE:
             mode := (mode << core#FLD_WR_MODE) & core#WRMR_MASK
         OTHER:
             result := (tmp >> 6) & core#BITS_WR_MODE
@@ -68,15 +68,15 @@ PUB OpMode(mode) | tmp
 PUB ReadByte(sram_addr)
 ' Read a single byte from SRAM
 '   Valid values:
-'       sram_addr: 0..$F_FF_FF
+'       sram_addr: 0..$01_FF_FF
 '   Any other value is ignored                                                                                   
-    OpMode(OPMODE_BYTE)
+    OpMode(ONEBYTE)
     readReg(TRANS_DATA, sram_addr, 1, @result)
 
 PUB ReadBytes(sram_addr, nr_bytes, buff_addr)
 ' Read multiple bytes from SRAM
 '   Valid values:
-'       sram_addr: 0..$F_FF_FF
+'       sram_addr: 0..$01_FF_FF
 '   Any other value is ignored                                                                                   
     readReg(TRANS_DATA, sram_addr, nr_bytes, buff_addr)
 
@@ -87,7 +87,7 @@ PUB ReadPage(sram_page_nr, nr_bytes, buff_addr)
 '   Any other value is ignored
     case sram_page_nr
         0..4095:
-            OpMode(OPMODE_PAGE)
+'            OpMode(PAGE)   ' This can be uncommented for simplicity, but page reads are much slower (~514uS vs ~243uS)
             readReg(TRANS_DATA, sram_page_nr << 5 {*32}, nr_bytes, buff_addr)
             return
         OTHER:
@@ -100,18 +100,18 @@ PUB ResetIO
 PUB WriteByte(sram_addr, val)
 ' Write a single byte to SRAM
 '   Valid values:
-'       sram_addr: 0..$F_FF_FF
+'       sram_addr: 0..$01_FF_FF
 '   Any other value is ignored
-    OpMode(OPMODE_BYTE)
+    OpMode(ONEBYTE)
     val &= $FF
     writeReg(TRANS_DATA, sram_addr, 1, @val)
 
 PUB WriteBytes(sram_addr, nr_bytes, buff_addr)
 ' Write multiple bytes to SRAM
 '   Valid values:
-'       sram_addr: 0..$F_FF_FF
+'       sram_addr: 0..$01_FF_FF
 '   Any other value is ignored
-    OpMode(OPMODE_SEQ)
+    OpMode(SEQ)
     writeReg(TRANS_DATA, sram_addr, nr_bytes, buff_addr)
 
 PUB WritePage(sram_page_nr, nr_bytes, buff_addr)
@@ -121,7 +121,7 @@ PUB WritePage(sram_page_nr, nr_bytes, buff_addr)
 '   Any other value is ignored
     case sram_page_nr
         0..4095:
-            OpMode(OPMODE_PAGE)
+'            OpMode(PAGE)
             writeReg(TRANS_DATA, sram_page_nr << 5 {*32}, nr_bytes, buff_addr)
             return
         OTHER:
@@ -139,7 +139,7 @@ PRI readReg(trans_type, reg, nr_bytes, buff_addr) | cmd_packet, tmp
 
         TRANS_DATA:
             case reg
-                0..$0F_FF_FF:
+                0..$01_FF_FF:
                     cmd_packet.byte[0] := core#READ
                     cmd_packet.byte[1] := reg.byte[2]
                     cmd_packet.byte[2] := reg.byte[1]
@@ -171,7 +171,7 @@ PRI writeReg(trans_type, reg, nr_bytes, buff_addr) | cmd_packet, tmp
                     return FALSE        
         TRANS_DATA:
             case reg
-                0..$0F_FF_FF:
+                0..$01_FF_FF:
                     cmd_packet.byte[0] := core#WRITE
                     cmd_packet.byte[1] := reg.byte[2]
                     cmd_packet.byte[2] := reg.byte[1]
