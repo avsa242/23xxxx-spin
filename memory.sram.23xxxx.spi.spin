@@ -44,11 +44,15 @@ PUB Stop{}
 
     spi.stop{}
 
+PUB Defaults{}
+' Factory default settings
+    opmode(SEQ)
+
 PUB OpMode(mode): curr_mode
 ' Set read/write operation mode
 '   Valid values:
 '       ONEBYTE (%00): Single byte R/W access
-'       SEQ (%01): Sequential R/W access (crosses page boundaries)
+'      *SEQ (%01): Sequential R/W access (crosses page boundaries)
 '       PAGE (%10): Single page R/W access
 '   Any other value polls the chip and returns the current setting
     readreg(TRANS_CMD, core#RDMR, 1, @curr_mode)
@@ -65,7 +69,6 @@ PUB ReadByte(sram_addr): s_rdbyte
 '   Valid values:
 '       sram_addr: 0..$01_FF_FF
 '   Any other value is ignored
-    opmode(ONEBYTE)
     readreg(TRANS_DATA, sram_addr, 1, @s_rdbyte)
 
 PUB ReadBytes(sram_addr, nr_bytes, ptr_buff)
@@ -82,7 +85,6 @@ PUB ReadPage(sram_page_nr, nr_bytes, ptr_buff)
 '   Any other value is ignored
     case sram_page_nr
         0..4095:
-'            opmode(PAGE)   ' This can be uncommented for simplicity, but page reads are much slower (~514uS vs ~243uS)
             readreg(TRANS_DATA, sram_page_nr << 5 {*32}, nr_bytes, ptr_buff)
             return
         other:
@@ -97,7 +99,6 @@ PUB WriteByte(sram_addr, val)
 '   Valid values:
 '       sram_addr: 0..$01_FF_FF
 '   Any other value is ignored
-    opmode(ONEBYTE)
     val &= $FF
     writereg(TRANS_DATA, sram_addr, 1, @val)
 
@@ -106,7 +107,6 @@ PUB WriteBytes(sram_addr, nr_bytes, ptr_buff)
 '   Valid values:
 '       sram_addr: 0..$01_FF_FF
 '   Any other value is ignored
-    opmode(SEQ)
     writereg(TRANS_DATA, sram_addr, nr_bytes, ptr_buff)
 
 PUB WritePage(sram_page_nr, nr_bytes, ptr_buff)
@@ -116,7 +116,6 @@ PUB WritePage(sram_page_nr, nr_bytes, ptr_buff)
 '   Any other value is ignored
     case sram_page_nr
         0..4095:
-'            opmode(PAGE)
             writereg(TRANS_DATA, sram_page_nr << 5 {*32}, nr_bytes, ptr_buff)
             return
         other:
