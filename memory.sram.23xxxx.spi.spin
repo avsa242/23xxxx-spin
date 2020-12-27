@@ -6,7 +6,7 @@
         SPI SRAM
     Copyright (c) 2020
     Started May 20, 2019
-    Updated Jan 19, 2020
+    Updated Dec 27, 2020
     See end of file for terms of use.
     --------------------------------------------
 }
@@ -21,10 +21,6 @@ CON
 ' SPI transaction types
     TRANS_CMD   = 0
     TRANS_DATA  = 1
-
-VAR
-
-    byte _CS, _SCK, _MOSI, _MISO
 
 OBJ
 
@@ -58,9 +54,9 @@ PUB OpMode(mode) | tmp
     readReg (TRANS_CMD, core#RDMR, 1, @tmp)
     case mode
         ONEBYTE, SEQ, PAGE:
-            mode := (mode << core#FLD_WR_MODE) & core#WRMR_MASK
+            mode := (mode << core#WR_MODE) & core#WRMR_MASK
         OTHER:
-            result := (tmp >> 6) & core#BITS_WR_MODE
+            result := (tmp >> 6) & core#WR_MODE_BITS
             return
 
     writeReg (TRANS_CMD, core#WRMR, 1, @mode)
