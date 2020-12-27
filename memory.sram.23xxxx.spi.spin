@@ -29,8 +29,8 @@ OBJ
     time: "time"
     io  : "io"
 
-PUB Null
-'This is not a top-level object
+PUB Null{}
+' This is not a top-level object
 
 PUB Start(CS_PIN, SCK_PIN, MOSI_PIN, MISO_PIN): okay
 
@@ -38,42 +38,41 @@ PUB Start(CS_PIN, SCK_PIN, MOSI_PIN, MISO_PIN): okay
         time.msleep(1)
         return okay
 
-    return FALSE                                                'If we got here, something went wrong
+    return FALSE                                ' something above failed
 
-PUB Stop
+PUB Stop{}
 
-    spi.stop
+    spi.stop{}
 
-PUB OpMode(mode) | tmp
+PUB OpMode(mode): curr_mode
 ' Set read/write operation mode
 '   Valid values:
 '       ONEBYTE (%00): Single byte R/W access
 '       SEQ (%01): Sequential R/W access (crosses page boundaries)
 '       PAGE (%10): Single page R/W access
 '   Any other value polls the chip and returns the current setting
-    readreg(TRANS_CMD, core#RDMR, 1, @tmp)
+    readreg(TRANS_CMD, core#RDMR, 1, @curr_mode)
     case mode
         ONEBYTE, SEQ, PAGE:
             mode := (mode << core#WR_MODE) & core#WRMR_MASK
         other:
-            result := (tmp >> 6) & core#WR_MODE_BITS
-            return
+            return (curr_mode >> core#WR_MODE) & core#WR_MODE_BITS
 
     writereg(TRANS_CMD, core#WRMR, 1, @mode)
 
-PUB ReadByte(sram_addr)
+PUB ReadByte(sram_addr): s_rdbyte
 ' Read a single byte from SRAM
 '   Valid values:
 '       sram_addr: 0..$01_FF_FF
-'   Any other value is ignored                                                                                   
+'   Any other value is ignored
     opmode(ONEBYTE)
-    readreg(TRANS_DATA, sram_addr, 1, @result)
+    readreg(TRANS_DATA, sram_addr, 1, @s_rdbyte)
 
 PUB ReadBytes(sram_addr, nr_bytes, ptr_buff)
 ' Read multiple bytes from SRAM
 '   Valid values:
 '       sram_addr: 0..$01_FF_FF
-'   Any other value is ignored                                                                                   
+'   Any other value is ignored
     readreg(TRANS_DATA, sram_addr, nr_bytes, ptr_buff)
 
 PUB ReadPage(sram_page_nr, nr_bytes, ptr_buff)
@@ -89,7 +88,7 @@ PUB ReadPage(sram_page_nr, nr_bytes, ptr_buff)
         other:
             return
 
-PUB ResetIO
+PUB ResetIO{}
 ' Reset to SPI mode
     writereg(TRANS_CMD, core#RSTIO, 1, 0)
 
@@ -123,16 +122,15 @@ PUB WritePage(sram_page_nr, nr_bytes, ptr_buff)
         other:
             return
 
-PRI readReg(trans_type, reg_nr, nr_bytes, ptr_buff) | cmd_pkt, tmp
+PRI readReg(trans_type, reg_nr, nr_bytes, ptr_buff) | cmd_pkt
 ' Read nr_bytes from device into ptr_buff
     case trans_type
         TRANS_CMD:
             case reg_nr
                 core#RDMR:
-                    spi.write (TRUE, @reg_nr, 1, FALSE)
-                    result := spi.read(@result, 1)
+                    spi.write(TRUE, @reg_nr, 1, FALSE)
+                    spi.read(ptr_buff, 1)
                     return
-
         TRANS_DATA:
             case reg_nr
                 0..$01_FF_FF:
@@ -149,7 +147,7 @@ PRI readReg(trans_type, reg_nr, nr_bytes, ptr_buff) | cmd_pkt, tmp
         other:
             return
 
-PRI writeReg(trans_type, reg_nr, nr_bytes, ptr_buff) | cmd_pkt, tmp
+PRI writeReg(trans_type, reg_nr, nr_bytes, ptr_buff) | cmd_pkt
 ' Write nr_bytes to device from ptr_buff
     case trans_type
         TRANS_CMD:
