@@ -27,7 +27,6 @@ OBJ
     spi : "com.spi.fast"
     core: "core.con.23xxxx"
     time: "time"
-    io  : "io"
 
 PUB Null{}
 ' This is not a top-level object
@@ -51,32 +50,36 @@ PUB Defaults{}
 PUB OpMode(mode): curr_mode
 ' Set read/write operation mode
 '   Valid values:
-'       ONEBYTE (%00): Single byte R/W access
-'      *SEQ (%01): Sequential R/W access (crosses page boundaries)
-'       PAGE (%10): Single page R/W access
+'       ONEBYTE (%00): Confine access to single address
+'      *SEQ (%01): Entire SRAM accessible, no page boundaries
+'           (address counter wraps to 00_00_00 after reaching
+'           the end of the SRAM)
+'       PAGE (%10): Confine access to single page
+'           (address counter wraps to start of page address after reaching the
+'           end of the page)
 '   Any other value polls the chip and returns the current setting
-    readreg(TRANS_CMD, core#RDMR, 1, @curr_mode)
+    readreg(core#RDMR, 1, @curr_mode)
     case mode
         ONEBYTE, SEQ, PAGE:
             mode := (mode << core#WR_MODE) & core#WRMR_MASK
         other:
             return (curr_mode >> core#WR_MODE) & core#WR_MODE_BITS
 
-    writereg(TRANS_CMD, core#WRMR, 1, @mode)
+    writereg(core#WRMR, 1, @mode)
 
 PUB ReadByte(sram_addr): s_rdbyte
 ' Read a single byte from SRAM
 '   Valid values:
 '       sram_addr: 0..$01_FF_FF
-'   Any other value is ignored
-    readreg(TRANS_DATA, sram_addr, 1, @s_rdbyte)
+'   Any other value is clamped to maximum address
+    readsram(sram_addr, 1, @s_rdbyte)
 
 PUB ReadBytes(sram_addr, nr_bytes, ptr_buff)
 ' Read multiple bytes from SRAM
 '   Valid values:
 '       sram_addr: 0..$01_FF_FF
-'   Any other value is ignored
-    readreg(TRANS_DATA, sram_addr, nr_bytes, ptr_buff)
+'   Any other value is clamped to maximum address
+    readsram(sram_addr, nr_bytes, ptr_buff)
 
 PUB ReadPage(sram_page_nr, nr_bytes, ptr_buff)
 ' Read up to 32 bytes from SRAM page
@@ -85,29 +88,29 @@ PUB ReadPage(sram_page_nr, nr_bytes, ptr_buff)
 '   Any other value is ignored
     case sram_page_nr
         0..4095:
-            readreg(TRANS_DATA, sram_page_nr << 5 {*32}, nr_bytes, ptr_buff)
+            readsram(sram_page_nr << 5, nr_bytes, ptr_buff)
             return
         other:
             return
 
 PUB ResetIO{}
 ' Reset to SPI mode
-    writereg(TRANS_CMD, core#RSTIO, 1, 0)
+    writereg(core#RSTIO, 1, 0)
 
 PUB WriteByte(sram_addr, val)
 ' Write a single byte to SRAM
 '   Valid values:
 '       sram_addr: 0..$01_FF_FF
-'   Any other value is ignored
+'   Any other value is clamped to maximum address
     val &= $FF
-    writereg(TRANS_DATA, sram_addr, 1, @val)
+    writesram(sram_addr, 1, @val)
 
 PUB WriteBytes(sram_addr, nr_bytes, ptr_buff)
 ' Write multiple bytes to SRAM
 '   Valid values:
 '       sram_addr: 0..$01_FF_FF
-'   Any other value is ignored
-    writereg(TRANS_DATA, sram_addr, nr_bytes, ptr_buff)
+'   Any other value is clamped to maximum address
+    writesram(sram_addr, nr_bytes, ptr_buff)
 
 PUB WritePage(sram_page_nr, nr_bytes, ptr_buff)
 ' Write up to 32 bytes to SRAM page
@@ -116,68 +119,52 @@ PUB WritePage(sram_page_nr, nr_bytes, ptr_buff)
 '   Any other value is ignored
     case sram_page_nr
         0..4095:
-            writereg(TRANS_DATA, sram_page_nr << 5 {*32}, nr_bytes, ptr_buff)
+            writesram(sram_page_nr << 5 {*32}, nr_bytes, ptr_buff)
             return
         other:
             return
 
-PRI readReg(trans_type, reg_nr, nr_bytes, ptr_buff) | cmd_pkt
+PRI readReg(reg_nr, nr_bytes, ptr_buff)
 ' Read nr_bytes from device into ptr_buff
-    case trans_type
-        TRANS_CMD:
-            case reg_nr
-                core#RDMR:
-                    spi.write(TRUE, @reg_nr, 1, FALSE)
-                    spi.read(ptr_buff, 1)
-                    return
-        TRANS_DATA:
-            case reg_nr
-                0..$01_FF_FF:
-                    cmd_pkt.byte[0] := core#READ
-                    cmd_pkt.byte[1] := reg_nr.byte[2]
-                    cmd_pkt.byte[2] := reg_nr.byte[1]
-                    cmd_pkt.byte[3] := reg_nr.byte[0]
-
-                    spi.write(TRUE, @cmd_pkt, 4, FALSE)
-                    spi.read(ptr_buff, nr_bytes)
-                    return
-                other:
-                    return
-        other:
+    case reg_nr
+        core#RDMR:
+            spi.write(TRUE, @reg_nr, 1, FALSE)
+            spi.read(ptr_buff, 1)
             return
 
-PRI writeReg(trans_type, reg_nr, nr_bytes, ptr_buff) | cmd_pkt
+PRI readSRAM(sram_addr, nr_bytes, ptr_buff) | cmd_pkt
+
+    cmd_pkt.byte[0] := core#READ
+    cmd_pkt.byte[1] := sram_addr.byte[2] & 1
+    cmd_pkt.byte[2] := sram_addr.byte[1]
+    cmd_pkt.byte[3] := sram_addr.byte[0]
+
+    spi.write(TRUE, @cmd_pkt, 4, FALSE)
+    spi.read(ptr_buff, nr_bytes)
+
+PRI writeReg(reg_nr, nr_bytes, ptr_buff) | cmd_pkt
 ' Write nr_bytes to device from ptr_buff
-    case trans_type
-        TRANS_CMD:
-            case reg_nr
-                core#WRMR:
-                    cmd_pkt.byte[0] := reg_nr
-                    cmd_pkt.byte[1] := byte[ptr_buff][0]
-                    spi.write(TRUE, @cmd_pkt, 2, TRUE)
-                    return
-                core#EQIO, core#EDIO, core#RSTIO:
-                    spi.write(TRUE, @reg_nr, 1, TRUE)
-                    return
-
-                other:
-                    return
-        TRANS_DATA:
-            case reg_nr
-                0..$01_FF_FF:
-                    cmd_pkt.byte[0] := core#WRITE
-                    cmd_pkt.byte[1] := reg_nr.byte[2]
-                    cmd_pkt.byte[2] := reg_nr.byte[1]
-                    cmd_pkt.byte[3] := reg_nr.byte[0]
-
-                    spi.write(TRUE, @cmd_pkt, 4, FALSE)
-                    spi.write(TRUE, ptr_buff, nr_bytes, TRUE)
-                    return
-                other:
-                    return
-        
+    case reg_nr
+        core#WRMR:
+            cmd_pkt.byte[0] := reg_nr
+            cmd_pkt.byte[1] := byte[ptr_buff][0]
+            spi.write(TRUE, @cmd_pkt, 2, TRUE)
+            return
+        core#EQIO, core#EDIO, core#RSTIO:
+            spi.write(TRUE, @reg_nr, 1, TRUE)
+            return
         other:
             return
+
+PRI writeSRAM(sram_addr, nr_bytes, ptr_buff) | cmd_pkt
+
+    cmd_pkt.byte[0] := core#WRITE
+    cmd_pkt.byte[1] := sram_addr.byte[2] & 1
+    cmd_pkt.byte[2] := sram_addr.byte[1]
+    cmd_pkt.byte[3] := sram_addr.byte[0]
+
+    spi.write(TRUE, @cmd_pkt, 4, FALSE)
+    spi.write(TRUE, ptr_buff, nr_bytes, TRUE)
 
 DAT
 {
