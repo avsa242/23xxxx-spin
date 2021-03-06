@@ -4,9 +4,9 @@
     Author: Jesse Burt
     Description: Driver for 23xxxx series
         SPI SRAM
-    Copyright (c) 2020
+    Copyright (c) 2021
     Started May 20, 2019
-    Updated Dec 27, 2020
+    Updated Mar 6, 2021
     See end of file for terms of use.
     --------------------------------------------
 }
@@ -24,24 +24,29 @@ CON
 
 OBJ
 
-    spi : "com.spi.fast"
-    core: "core.con.23xxxx"
-    time: "time"
+    spi : "com.spi.fast"                        ' PASM SPI engine
+    core: "core.con.23xxxx"                     ' hw-specific constants
+    time: "time"                                ' basic timekeeping functions
 
 PUB Null{}
 ' This is not a top-level object
 
-PUB Start(CS_PIN, SCK_PIN, MOSI_PIN, MISO_PIN): okay
+PUB Start(CS_PIN, SCK_PIN, MOSI_PIN, MISO_PIN): status
 
-    if okay := spi.start(CS_PIN, SCK_PIN, MOSI_PIN, MISO_PIN)
-        time.msleep(1)
-        return okay
-
-    return FALSE                                ' something above failed
+    if lookdown(CS_PIN: 0..31) and lookdown(SCK_PIN: 0..31) and {
+}   lookdown(MOSI_PIN: 0..31) and lookdown(MISO_PIN: 0..31)
+        if (status := spi.init(CS_PIN, SCK_PIN, MOSI_PIN, MISO_PIN, {
+}       core#SPI_MODE))
+            time.msleep(1)
+            return status
+    ' if this point is reached, something above failed
+    ' Double check I/O pin assignments, connections, power
+    ' Lastly - make sure you have at least one free core/cog
+    return FALSE
 
 PUB Stop{}
 
-    spi.stop{}
+    spi.deinit{}
 
 PUB Defaults{}
 ' Factory default settings
@@ -128,8 +133,10 @@ PRI readReg(reg_nr, nr_bytes, ptr_buff)
 ' Read nr_bytes from device into ptr_buff
     case reg_nr
         core#RDMR:
-            spi.write(TRUE, @reg_nr, 1, FALSE)
-            spi.read(ptr_buff, 1)
+            spi.deselectafter(false)
+            spi.wr_byte(reg_nr)
+            spi.deselectafter(true)
+            spi.rdblock_lsbf(ptr_buff, 1)
             return
 
 PRI readSRAM(sram_addr, nr_bytes, ptr_buff) | cmd_pkt
@@ -139,8 +146,10 @@ PRI readSRAM(sram_addr, nr_bytes, ptr_buff) | cmd_pkt
     cmd_pkt.byte[2] := sram_addr.byte[1]
     cmd_pkt.byte[3] := sram_addr.byte[0]
 
-    spi.write(TRUE, @cmd_pkt, 4, FALSE)
-    spi.read(ptr_buff, nr_bytes)
+    spi.deselectafter(false)
+    spi.wrblock_lsbf(@cmd_pkt, 4)
+    spi.deselectafter(true)
+    spi.rdblock_lsbf(ptr_buff, nr_bytes)
 
 PRI writeReg(reg_nr, nr_bytes, ptr_buff) | cmd_pkt
 ' Write nr_bytes to device from ptr_buff
@@ -148,10 +157,12 @@ PRI writeReg(reg_nr, nr_bytes, ptr_buff) | cmd_pkt
         core#WRMR:
             cmd_pkt.byte[0] := reg_nr
             cmd_pkt.byte[1] := byte[ptr_buff][0]
-            spi.write(TRUE, @cmd_pkt, 2, TRUE)
+            spi.deselectafter(true)
+            spi.wrblock_lsbf(@cmd_pkt, 2)
             return
         core#EQIO, core#EDIO, core#RSTIO:
-            spi.write(TRUE, @reg_nr, 1, TRUE)
+            spi.deselectafter(true)
+            spi.wr_byte(reg_nr)
             return
         other:
             return
@@ -163,8 +174,10 @@ PRI writeSRAM(sram_addr, nr_bytes, ptr_buff) | cmd_pkt
     cmd_pkt.byte[2] := sram_addr.byte[1]
     cmd_pkt.byte[3] := sram_addr.byte[0]
 
-    spi.write(TRUE, @cmd_pkt, 4, FALSE)
-    spi.write(TRUE, ptr_buff, nr_bytes, TRUE)
+    spi.deselectafter(false)
+    spi.wrblock_lsbf(@cmd_pkt, 4)
+    spi.deselectafter(true)
+    spi.wrblock_lsbf(ptr_buff, nr_bytes)
 
 DAT
 {

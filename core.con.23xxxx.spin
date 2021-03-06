@@ -3,9 +3,9 @@
     Filename: core.con.23lcxxxx.spin
     Author: Jesse Burt
     Description: Low-level constants
-    Copyright (c) 2020
+    Copyright (c) 2021
     Started May 20, 2019
-    Updated Dec 27, 2020
+    Updated Mar 6, 2021
     See end of file for terms of use.
     --------------------------------------------
 }
@@ -13,9 +13,7 @@
 CON
 
 ' SPI Configuration
-    CPOL                        = 0
-    MOSI_BITORDER               = 5             'MSBFIRST
-    MISO_BITORDER               = 0             'MSBPRE
+    SPI_MODE                    = 0
     SCK_MAX_FREQ                = 20_000_000
 
 ' Register definitions
