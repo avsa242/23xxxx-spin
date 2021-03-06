@@ -18,10 +18,6 @@ CON
     SEQ         = %01
     PAGE        = %10
 
-' SPI transaction types
-    TRANS_CMD   = 0
-    TRANS_DATA  = 1
-
 OBJ
 
     spi : "com.spi.fast"                        ' PASM SPI engine

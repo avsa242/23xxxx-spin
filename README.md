@@ -7,22 +7,22 @@ This is a P8X32A/Propeller driver object for 23xxxx-series SRAM
 
 ## Salient Features
 
-* SPI connection at 20MHz W / 10MHz R (P1), 20MHz W / 20MHz R  (P2)
+* SPI connection at 20MHz W / 10MHz R (P1), up to 20MHz W / 20MHz R  (P2)
 * Operations for reading and writing a single byte, up to a 32-byte page, or multiple bytes across page boundaries
 
 ## Requirements
 
 P1/SPIN1:
 * spin-standard-library
-* 1 extra core/cog for the PASM SPI driver
+* 1 extra core/cog for the PASM SPI engine
 
 P2/SPIN2:
 * p2-spin-standard-library
 
 ## Compiler Compatibility
 
-* P1/SPIN1: OpenSpin (tested with 1.00.81)
-* P2/SPIN2: FlexSpin (tested with 5.0.0)
+* P1/SPIN1: OpenSpin (tested with 1.00.81), FlexSpin (tested with 5.1.1-beta)
+* P2/SPIN2: FlexSpin (tested with 5.1.1-beta)
 * ~~BST~~ (incompatible - no preprocessor)
 * ~~Propeller Tool~~ (incompatible - no preprocessor)
 * ~~PNut~~ (incompatible - no preprocessor)

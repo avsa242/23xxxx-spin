@@ -4,16 +4,16 @@
     Author: Jesse Burt
     Description: Simple demo of the 23XXXX driver
         (P2 version)
-    Copyright (c) 2020
+    Copyright (c) 2021
     Started Dec 27, 2020
-    Updated Dec 27, 2020
+    Updated Mar 6, 2021
     See end of file for terms of use.
     --------------------------------------------
 }
 
 CON
 
-    _clkfreq    = cfg._clkfreq_def
+    _clkfreq    = 220_000_000
     _xtlfreq    = cfg._xtlfreq
     TICKS_USEC  = _clkfreq / 1_000_000
 
@@ -21,10 +21,11 @@ CON
     SER_BAUD    = 2_000_000
     LED         = cfg.LED1
 
-    CS_PIN      = 24
-    SCK_PIN     = 25
-    MOSI_PIN    = 26
-    MISO_PIN    = 27
+    CS_PIN      = 0
+    SCK_PIN     = 1
+    MOSI_PIN    = 2
+    MISO_PIN    = 3
+    SCK_FREQ    = 20_000_000
 
 ' 64 = 23640, 256 = 23256, 512 = 23512, 1024 = 231024
     PART        = 1024
@@ -111,7 +112,7 @@ PUB Setup
     waitms(30)
     ser.clear()
     ser.strln(string("Serial terminal started"))
-    if sram.start(CS_PIN, SCK_PIN, MOSI_PIN, MISO_PIN)
+    if sram.start(CS_PIN, SCK_PIN, MOSI_PIN, MISO_PIN, SCK_FREQ)
         ser.strln(string("23XXXX driver started"))
     else
         ser.strln(string("23XXXX driver failed to start - halting"))
