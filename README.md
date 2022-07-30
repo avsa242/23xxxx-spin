@@ -1,5 +1,5 @@
-# 23lcxxxx-spin 
----------------
+# 23xxxx-spin
+-------------
 
 This is a P8X32A/Propeller driver object for 23xxxx-series SRAM
 
